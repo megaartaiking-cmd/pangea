@@ -1,6 +1,6 @@
 # PANGEA — One Language for People, Machines, and Minds
 
-**Version 1.2** · File extension: `.pangaea` · Reference implementation: `pangea.py` (Python 3, standard library only)
+**Version 1.0** · File extension: `.pangaea` · Reference implementation: `pangea.py` (Python 3, standard library only)
 
 ## 1. What Pangea is
 
@@ -197,68 +197,7 @@ Lahore is 28 degrees and sunny.
 That is the whole idea: a human, an AI, and a computer, speaking one
 language, in one room, in words anyone can read.
 
-## 6. Admin access and no room for error
-
-When a user asks an agent to do a real task, the agent needs two things:
-the **power** to use every resource, and a way to make **almost no errors**.
-Pangea gives both, and only a human can switch them on.
-
-### Admin access — `grant admin`, `revoke admin`
-
-Admin agents can use the computer's full resources: run system commands
-(`run`) and manage files (`delete`). Nobody is born an admin — a human
-grants it, and a human can take it away.
-
-```pangea
-link Ahmad as human
-link Alya as ai
-
-grant admin to Alya        # one agent
-grant admin to all ai      # every linked AI agent
-grant admin to all         # every linked agent
-
-revoke admin from Alya
-say admins()               # says: ["Alya"]
-```
-
-Only a human (or the human running the program) can grant or revoke admin.
-An AI cannot grant admin to itself — if it tries, Pangea refuses in plain
-words. An agent that is not admin and tries to use a powerful command gets
-a clear refusal telling it what to ask the human for.
-
-```pangea
-speak as Alya
-let files = list "."                     # listing files is open to everyone
-let answer = run "echo hello"            # needs admin — refuses without it
-delete "old.txt"                         # needs admin too
-```
-
-### No room for error — `no room`, `check`, `room`
-
-`no room` switches on strict mode for the rest of the program:
-
-- **`check` statements are enforced.** A `check` states what must be true.
-  If it is not true, the program stops at once and says exactly what
-  failed — it never carries on with a wrong result.
-- **Failed commands are retried.** In strict mode a failed `run` command
-  is tried up to 3 times before it is allowed to fail.
-- **A report is printed at the end.** When the program finishes cleanly,
-  it reports exactly what happened: how many statements ran, how many
-  checks passed, how many commands ran, how many retries were needed —
-  and 0 errors.
-
-```pangea
-no room
-
-check len(files) > 0
-check answer is "hello from the computer"
-```
-
-`room` switches strict mode back off. No system can promise literally zero
-errors — but a program that checks every step, retries what fails, and
-reports its own work is as close as a language can get.
-
-## 7. Built-in functions
+## 6. Built-in functions
 
 | Function        | What it does                                  |
 |-----------------|-----------------------------------------------|
@@ -277,10 +216,8 @@ reports its own work is as close as a language can get.
 | `inbox()`       | Messages waiting for the current speaker      |
 | `now()`         | The current date and time, as text            |
 | `read(file)`    | Read a whole text file                        |
-| `list(folder)`  | The files in a folder, as a sorted list       |
-| `admins()`      | The agents that have admin access, as a list  |
 
-## 8. Grammar (informal)
+## 7. Grammar (informal)
 
 ```
 program     := statement*
@@ -303,7 +240,7 @@ expression  := or-expression
 Blocks are closed with `end`. Indentation is for humans; the interpreter
 only needs `end`. A `#` starts a comment that runs to the end of the line.
 
-## 9. Errors, in plain words
+## 8. Errors, in plain words
 
 Pangea never crashes with a stack trace. Every error says what went wrong,
 where, and in plain language:
@@ -314,38 +251,30 @@ Line 9: 'send' needs a linked agent. 'Bob' is not linked yet.
 Line 2: You cannot divide by zero.
 ```
 
-## 10. Keywords (all 36)
+## 9. Keywords (all 27)
 
 ```
 let say ask if elif else end while for in to return
 link as speak send receive broadcast from save read
-grant revoke admin check no room delete run list all
 and or not is yes no nothing stop
 ```
 
-## 11. What Pangea is not (honest notes)
+## 10. What Pangea is not (honest notes)
 
 - **Not a replacement for C, Python, or JavaScript.** Those languages exist
   because different jobs need different tools. Pangea is the shared tongue
   between them, not a substitute for them.
 - **Not a new AI model.** Pangea is a language, not a mind. It lets minds
   talk to each other clearly; it does not think for them.
-- **Version 1.2 is a reference implementation.** The interpreter is a
+- **Version 1.0 is a reference implementation.** The interpreter is a
   single Python file, deliberately small and readable, so anyone can check
   how it works. Speed and large programs come later.
 
-## 12. Installing on Windows
+## 11. Installing on Windows
 
-Python is bundled with Pangea (version 1.2), so nothing else needs to be
-installed. Two ways to run it:
-
-**Install it:** unzip the package and double-click `Install.bat`. It copies
-Pangea to `%LOCALAPPDATA%\Pangea`, adds it to your PATH, creates Start Menu
-and Desktop shortcuts, and links `.pangea` files to the interpreter, so
-double-clicking a program runs it.
-
-**Or just run it:** unzip the package and double-click `Run-Pangea.bat`.
-No install at all — Pangea opens straight away from the folder.
+Run `PangeaSetup.exe`. It installs Pangea to `%LOCALAPPDATA%\Pangea`,
+adds it to your PATH, creates Start Menu and Desktop shortcuts, and links
+`.pangea` files to the interpreter, so double-clicking a program runs it.
 
 Then, in any Command Prompt or PowerShell window:
 
@@ -355,5 +284,5 @@ pangea                   # open the interactive REPL
 pangea --check file.pangaea   # check a program without running it
 ```
 
-On Mac and Linux, run it with the Python 3 already on the machine:
-`python3 pangea.py hello.pangaea`.
+Pangea needs Python 3 on the PC. The installer checks for it and, if it is
+missing, opens the Python download page for you.

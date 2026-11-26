@@ -11,11 +11,10 @@ Usage:
 
 import difflib
 import os
-import subprocess
 import sys
 import time
 
-VERSION = "1.2.0"
+VERSION = "1.0.0"
 MAX_LOOP = 100000
 
 # ---------------------------------------------------------------------------
@@ -51,8 +50,7 @@ KEYWORDS = {
     "let", "say", "ask", "if", "elif", "else", "end", "while", "for", "in",
     "to", "return", "link", "as", "speak", "send", "receive", "broadcast",
     "from", "and", "or", "not", "is", "yes", "no", "nothing", "stop", "read",
-    "save", "grant", "revoke", "admin", "check", "room", "delete", "run",
-    "list", "all",
+    "save",
 }
 
 MULTI_OPS = ("==", "!=", "<=", ">=")
@@ -311,43 +309,9 @@ class Parser(object):
             if word == "stop":
                 self.advance()
                 return ("stop", line)
-            if word == "grant":
-                self.advance()
-                self.expect_kw("admin")
-                self.expect_kw("to")
-                return ("grant", line, self.parse_admin_target())
-            if word == "revoke":
-                self.advance()
-                self.expect_kw("admin")
-                self.expect_kw("from")
-                return ("revoke", line, self.parse_admin_target())
-            if word == "check":
-                self.advance()
-                return ("check", line, self.parse_expr())
-            if word == "no":
-                if self.peek(1).kind == "KW" and self.peek(1).value == "room":
-                    self.advance()
-                    self.advance()
-                    return ("noroom", line, True)
-            if word == "room":
-                self.advance()
-                return ("noroom", line, False)
-            if word == "delete":
-                self.advance()
-                return ("delete", line, self.parse_expr())
         # An expression on its own (usually a function call).
         expr = self.parse_expr()
         return ("expr", line, expr)
-
-    def parse_admin_target(self):
-        # One agent, all agents, or all agents of one kind.
-        t = self.peek()
-        if t.kind == "KW" and t.value == "all":
-            self.advance()
-            if self.peek().kind == "IDENT" and self.peek().value in ("ai", "human", "computer"):
-                return ("all", self.advance().value)
-            return ("all", None)
-        return ("one", self.expect_ident())
 
     def parse_if(self):
         line = self.peek().line
@@ -522,7 +486,7 @@ class Parser(object):
                 if self.peek().kind in ("NL", "EOF") or \
                         (self.peek().kind == "KW" and self.peek().value in ("end", "elif", "else")):
                     return ("ask", line, ("str", line, ""))
-                return ("ask", line, self.parse_add())
+                return ("ask", line, self.parse_expr())
             if word == "receive":
                 self.advance()
                 self.expect_kw("from")
@@ -532,21 +496,10 @@ class Parser(object):
                 self.advance()
                 if self.at_op("("):
                     self.advance()
-                    arg = self.parse_add()
+                    arg = self.parse_expr()
                     self.expect_op(")")
                     return ("call", line, "read", [arg])
-                return ("call", line, "read", [self.parse_add()])
-            if word == "run":
-                self.advance()
-                return ("run", line, self.parse_add())
-            if word == "list":
-                self.advance()
-                if self.at_op("("):
-                    self.advance()
-                    arg = self.parse_add()
-                    self.expect_op(")")
-                    return ("call", line, "list", [arg])
-                return ("call", line, "list", [self.parse_add()])
+                return ("call", line, "read", [self.parse_expr()])
         if t.kind == "IDENT":
             self.advance()
             name = t.value
@@ -611,42 +564,6 @@ def format_container(value):
     if isinstance(value, str):
         return '"%s"' % value
     return format_value(value)
-
-
-def expr_text(node):
-    # Render an expression back into readable Pangea, for check messages.
-    kind = node[0]
-    if kind == "num":
-        return format_value(node[2])
-    if kind == "str":
-        return '"%s"' % node[2]
-    if kind == "bool":
-        return "yes" if node[2] else "no"
-    if kind == "nothing":
-        return "nothing"
-    if kind == "var":
-        return node[2]
-    if kind == "list":
-        return "[" + ", ".join(expr_text(e) for e in node[2]) + "]"
-    if kind == "map":
-        return "{" + ", ".join("%s: %s" % (k, expr_text(v)) for k, v in node[2]) + "}"
-    if kind == "index":
-        return "%s[%s]" % (expr_text(node[2]), expr_text(node[3]))
-    if kind == "unop":
-        if node[2] == "not":
-            return "not " + expr_text(node[3])
-        return "-" + expr_text(node[3])
-    if kind == "binop":
-        return "%s %s %s" % (expr_text(node[3]), node[2], expr_text(node[4]))
-    if kind == "call":
-        return "%s(%s)" % (node[2], ", ".join(expr_text(a) for a in node[3]))
-    if kind == "ask":
-        return "ask %s" % expr_text(node[2])
-    if kind == "receive":
-        return "receive from %s" % node[2]
-    if kind == "run":
-        return "run %s" % expr_text(node[2])
-    return "?"
 
 
 def type_name(value):
@@ -743,9 +660,6 @@ class Interpreter(object):
         self.agents = {"me": "program"}
         self.room = []
         self.speaker = "me"
-        self.admins = set()
-        self.strict = False
-        self.stats = {"statements": 0, "checks": 0, "commands": 0, "retries": 0}
         self.builtins = {
             "len": self._len,
             "type": self._type,
@@ -762,8 +676,6 @@ class Interpreter(object):
             "inbox": self._inbox,
             "now": self._now,
             "read": self._read,
-            "admins": self._admins,
-            "list": self._list,
         }
 
     # -- builtins -----------------------------------------------------------
@@ -877,22 +789,6 @@ class Interpreter(object):
         except OSError as e:
             raise PangeaError("I could not read the file '%s' (%s)." % (path, e), line)
 
-    def _admins(self, args, line):
-        self._need(args, 0, "admins", line)
-        return sorted(self.admins)
-
-    def _list(self, args, line):
-        self._need(args, 1, "list", line)
-        path = args[0]
-        if not isinstance(path, str):
-            raise PangeaError("'list' needs the name of a folder, as text.", line)
-        try:
-            return sorted(os.listdir(path))
-        except FileNotFoundError:
-            raise PangeaError("I could not find the folder '%s'." % path, line)
-        except (OSError, NotADirectoryError) as e:
-            raise PangeaError("I could not list the folder '%s' (%s)." % (path, e), line)
-
     # -- running ------------------------------------------------------------
     def run(self, stmts, env=None):
         env = env or self.global_env
@@ -903,7 +799,6 @@ class Interpreter(object):
         kind = stmt[0]
         line = stmt[1]
         try:
-            self.stats["statements"] += 1
             if kind == "let":
                 env.define(stmt[2], self.eval_expr(stmt[3], env))
             elif kind == "say":
@@ -979,58 +874,10 @@ class Interpreter(object):
                     raise PangeaError("I could not write to the file '%s' (%s)." % (path, e), line)
             elif kind == "stop":
                 raise StopProgram()
-            elif kind == "grant":
-                self._grant(stmt[2], True, line)
-            elif kind == "revoke":
-                self._grant(stmt[2], False, line)
-            elif kind == "check":
-                self.stats["checks"] += 1
-                if not truthy(self.eval_expr(stmt[2], env)):
-                    raise PangeaError(
-                        "Check failed: %s was not true." % expr_text(stmt[2]), line)
-            elif kind == "noroom":
-                self.strict = stmt[2]
-            elif kind == "delete":
-                self._require_admin(line)
-                path = self.eval_expr(stmt[2], env)
-                if not isinstance(path, str):
-                    raise PangeaError("'delete' needs the name of a file, as text.", line)
-                try:
-                    os.remove(path)
-                except FileNotFoundError:
-                    raise PangeaError("I could not find the file '%s'." % path, line)
-                except OSError as e:
-                    raise PangeaError("I could not delete the file '%s' (%s)." % (path, e), line)
         except PangeaError as e:
             if e.line is None:
                 e.line = line
             raise
-
-    def _require_admin(self, line):
-        if self.speaker not in self.admins:
-            raise PangeaError(
-                "Only an admin agent can do that. A human can grant admin first: grant admin to %s" % self.speaker, line)
-
-    def _grant(self, target, give, line):
-        if self.speaker != "me" and self.agents.get(self.speaker) != "human":
-            raise PangeaError(
-                "Only a human can grant or revoke admin access. Speak as a human first.", line)
-        mode, value = target
-        if mode == "one":
-            if value != "me" and value not in self.agents:
-                raise PangeaError(
-                    "I don't know the agent '%s'. Link them first: link %s as ai" % (value, value), line)
-            if give:
-                self.admins.add(value)
-            else:
-                self.admins.discard(value)
-        else:
-            for agent_name, agent_kind in self.agents.items():
-                if value is None or agent_kind == value:
-                    if give:
-                        self.admins.add(agent_name)
-                    else:
-                        self.admins.discard(agent_name)
 
     def eval_expr(self, node, env):
         kind = node[0]
@@ -1066,12 +913,6 @@ class Interpreter(object):
                         del self.room[i]
                         return m["text"]
                 return None
-            if kind == "run":
-                cmd = self.eval_expr(node[2], env)
-                if not isinstance(cmd, str):
-                    raise PangeaError("'run' needs a command, as text.", line)
-                self._require_admin(line)
-                return self._run_command(cmd, line)
             if kind == "unop":
                 value = self.eval_expr(node[3], env)
                 if node[2] == "not":
@@ -1089,31 +930,6 @@ class Interpreter(object):
             if e.line is None:
                 e.line = line
             raise
-
-    def _run_command(self, cmd, line):
-        # In no-room mode a failed command is retried up to 3 times.
-        attempts = 3 if self.strict else 1
-        self.stats["commands"] += 1
-        last_error = ""
-        for attempt in range(attempts):
-            try:
-                proc = subprocess.run(cmd, shell=True, capture_output=True,
-                                      text=True, timeout=30)
-            except subprocess.TimeoutExpired:
-                last_error = "The command took too long (more than 30 seconds)."
-                if attempt + 1 < attempts:
-                    self.stats["retries"] += 1
-                    continue
-                raise PangeaError(last_error, line)
-            if proc.returncode == 0:
-                return proc.stdout.rstrip("\n")
-            last_error = proc.stderr.strip() or \
-                ("The command stopped with exit code %d." % proc.returncode)
-            if attempt + 1 < attempts:
-                self.stats["retries"] += 1
-                continue
-            raise PangeaError("The command '%s' failed: %s" % (cmd, last_error), line)
-        raise PangeaError("The command '%s' failed: %s" % (cmd, last_error), line)
 
     def _index(self, obj, idx, line):
         if isinstance(obj, list):
@@ -1273,10 +1089,6 @@ def run_file(path, interp):
     except PangeaError as e:
         print(str(e))
         return 1
-    if interp.strict:
-        s = interp.stats
-        print("No-room report: %d statements ran, %d checks passed, %d commands ran, %d retries, 0 errors."
-              % (s["statements"], s["checks"], s["commands"], s["retries"]))
     return 0
 
 
