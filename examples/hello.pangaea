@@ -1,0 +1,10 @@
+# Hello, Pangea.
+say "Hello, world!"
+
+let name = "Ahmad"
+say "Hello, " + name + "."
+
+let a = 6
+let b = 7
+say a * b
+say "Six times seven is " + str(a * b) + "."

@@ -1,0 +1,36 @@
+# One room, three minds: a human, an AI, and a computer.
+# This is the whole idea of Pangea — everyone speaks the same language.
+
+link Ahmad as human
+link Alya as ai
+link Server as computer
+
+speak as Ahmad
+send "What is the temperature in Lahore?" to Alya
+
+speak as Alya
+let question = receive from Ahmad
+say "Alya heard: " + question
+send "Checking the weather station..." to Ahmad
+send "temperature in Lahore" to Server
+
+speak as Server
+let request = receive from Alya
+say "Server heard: " + request
+send "Lahore is 28 degrees and sunny." to Alya
+
+speak as Alya
+let answer = receive from Server
+send "Lahore is 28 degrees and sunny." to Ahmad
+
+speak as Ahmad
+let note = receive from Alya
+say "Ahmad heard: " + note
+let reply = receive from Alya
+say "Ahmad heard: " + reply
+
+# And one message for everyone at once.
+speak as Alya
+broadcast "That is all for today. Goodbye!"
+speak as Ahmad
+say inbox()

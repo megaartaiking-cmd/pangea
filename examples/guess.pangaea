@@ -1,0 +1,16 @@
+# Guess the number.
+let secret = 42
+let tries = 0
+say "I am thinking of a number between 1 and 100."
+while yes:
+    let guess = num(ask "Your guess?")
+    let tries = tries + 1
+    if guess is secret:
+        say "Correct! You got it in " + str(tries) + " tries."
+        stop
+    elif guess < secret:
+        say "Too small."
+    else:
+        say "Too big."
+    end
+end

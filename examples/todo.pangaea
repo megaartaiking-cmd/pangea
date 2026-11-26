@@ -1,0 +1,15 @@
+# A small to-do list, saved to a file.
+to show(tasks):
+    say "Your tasks:"
+    for task in tasks:
+        say "- " + task
+    end
+end
+
+let tasks = ["Buy mangoes", "Call Alya", "Upload video 1"]
+push(tasks, "Drink chai")
+show(tasks)
+say "You have " + str(len(tasks)) + " tasks."
+save "Buy mangoes, Call Alya, Upload video 1, Drink chai" to "tasks.txt"
+say "Saved to tasks.txt."
+say "First task: " + tasks[0]
